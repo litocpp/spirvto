@@ -1,0 +1,6 @@
+{
+  "repository": "https://github.com/KhronosGroup/SPIRV-Headers.git",
+  "commit": "cb42dec3830d3ac67fa449ecdc0c0f73d5e74498",
+  "grammar": "include/spirv/unified1/spirv.core.grammar.json",
+  "sha256": "ea9d523b3d4fe5c0e61b29c5bbce23a4d2c3c9a25c57e83e3a3455067d74bafd"
+}

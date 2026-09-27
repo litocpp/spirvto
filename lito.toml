@@ -1,0 +1,19 @@
+[package]
+name = "spirvto"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "spirvto"
+module = "spirvto"
+archive = "spirvto"
+
+[dependencies]
+rstd-std = { version = "0.1.5", pub = true }
+
+[dev-dependencies]
+rstd-test = { version = "0.1.5" }
+
+[[test]]
+name = "spirvto-tests"
+sources = ["tests/main.cpp", "tests/reflect.cpp"]
