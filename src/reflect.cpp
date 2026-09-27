@@ -31,10 +31,11 @@ class Parser {
   Error error{ErrorKind::InvalidHeader, 0};
   bool failed = false;
   Word bound = 0;
+  Word context = 0;
 
   auto fail(ErrorKind kind, Word offset) -> bool {
     if (!failed)
-      error = {kind, offset};
+      error = {kind, offset ? offset : context};
     failed = true;
     return false;
   }
@@ -180,6 +181,7 @@ class Parser {
     auto n = get(id);
     if (!n)
       return 0;
+    context = n->offset;
     if (n->op != Op::Constant) {
       fail(ErrorKind::UnsupportedConstant, n->offset);
       return 0;
@@ -262,6 +264,7 @@ class Parser {
     auto n = get(id);
     if (!n)
       return out;
+    context = n->offset;
     if (member != 0xffffffffu) {
       auto offset = decoration(owner, Decoration::Offset, member);
       if (offset.is_none()) {
@@ -283,10 +286,17 @@ class Parser {
       for (auto d : out.array_dimensions)
         dimensions.push(Word(d));
       out.array_dimensions = rstd::move(dimensions);
+      Vec<Word> strides;
+      strides.push(Word(*stride));
+      for (auto s : out.array_strides)
+        strides.push(Word(s));
+      out.array_strides = rstd::move(strides);
       out.array_stride = *stride;
-      if (!length || *stride < out.size)
+      if (!length || *stride < out.size) {
         fail(ErrorKind::InvalidOperand, n->offset);
-      out.size = multiply(length, *stride);
+        return out;
+      }
+      out.size = add(multiply(length - 1, *stride), out.size);
     } else if (n->op == Op::TypeStruct) {
       Word extent = 0;
       for (Word j = 2; j < n->count; ++j) {
@@ -296,17 +306,7 @@ class Parser {
           extent = end;
         out.members.push(rstd::move(child));
       }
-      for (auto &child : out.members) {
-        for (const auto &next : out.members) {
-          if (&child != &next && child.offset == next.offset)
-            fail(ErrorKind::InvalidOperand, n->offset);
-          if (next.offset > child.offset &&
-              child.size > next.offset - child.offset)
-            child.size = next.offset - child.offset;
-        }
-      }
-      // Match the padded block extent consumed by SPIRV-Reflect clients.
-      out.size = add(extent, 15) & ~Word(15);
+      out.size = extent;
     } else {
       out.numeric = numeric(id);
       if (out.numeric.matrix_columns) {
@@ -321,8 +321,16 @@ class Parser {
         }
         out.matrix_major = row ? MatrixMajor::Row : MatrixMajor::Column;
         out.matrix_stride = *stride;
-        out.size = multiply(*stride, row ? out.numeric.matrix_rows
-                                         : out.numeric.matrix_columns);
+        const Word major =
+            row ? out.numeric.matrix_rows : out.numeric.matrix_columns;
+        const Word minor =
+            row ? out.numeric.matrix_columns : out.numeric.matrix_rows;
+        const Word vector_size = multiply(out.numeric.scalar_width / 8, minor);
+        if (!major || *stride < vector_size) {
+          fail(ErrorKind::InvalidOperand, n->offset);
+          return out;
+        }
+        out.size = add(multiply(*stride, major - 1), vector_size);
       } else
         out.size = multiply(out.numeric.scalar_width / 8,
                             out.numeric.vector_components);
@@ -368,6 +376,7 @@ class Parser {
       return fail(ErrorKind::InvalidHeader, 0);
     Word function = 0;
     for (Word offset = 5; offset < code.len().to_primitive();) {
+      context = offset;
       Instruction i;
       i.offset = offset;
       i.count = word(offset) >> 16;
@@ -419,16 +428,18 @@ class Parser {
       }
       if (i.op == Op::GroupDecorate || i.op == Op::GroupMemberDecorate ||
           i.op == Op::DecorateId)
-        return fail(ErrorKind::InvalidOperand, offset);
+        return fail(ErrorKind::UnsupportedDecoration, offset);
       offset += i.count;
       instructions.push(rstd::move(i));
     }
     if (function)
       return fail(ErrorKind::TruncatedInstruction, 0);
-    for (const auto &i : instructions)
+    for (const auto &i : instructions) {
+      context = i.offset;
       for (auto id : i.ids)
         if (!get(id))
           return false;
+    }
     return !failed;
   }
 

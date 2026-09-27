@@ -18,6 +18,7 @@ enum class ErrorKind {
   MissingEntryPoint,
   UnsupportedType,
   UnsupportedConstant,
+  UnsupportedDecoration,
   MissingDecoration,
   RecursiveType,
   Overflow
@@ -55,6 +56,7 @@ struct NumericType {
 };
 struct BlockVariable {
   String name;
+  // Offset is relative to the parent; size excludes trailing padding.
   Word offset = 0;
   Word size = 0;
   NumericType numeric;
@@ -62,6 +64,7 @@ struct BlockVariable {
   Word matrix_stride = 0;
   Word array_stride = 0;
   Vec<Word> array_dimensions;
+  Vec<Word> array_strides;
   Vec<BlockVariable> members;
 };
 struct DescriptorBinding {
